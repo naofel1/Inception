@@ -1,0 +1,158 @@
+version: "3.9"
+
+services:
+  db:
+    init: true
+    image: mariadb_inception
+    container_name: mariadb
+    build:
+      context: ./requirements/MariaDB
+      args:
+        - MYSQL_DATABASE=${MYSQL_DATABASE}
+        - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+        - MYSQL_USER=${MYSQL_USER}
+        - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    restart: always
+    volumes:
+     - db-data:/var/lib/mysql
+    networks:
+      backend:
+  wp:
+    depends_on:
+     - db
+    init: true
+    restart: always
+    container_name: wordpress
+    build:
+      context: ./requirements/WordPress
+      args:
+        - FQDN=${FQDN}
+        - WP_DB=${WP_DB}
+        - WP_USER=${WP_USER}
+        - WP_PASSWORD=${WP_PASSWORD}
+        - WP_HOST=${WP_HOST}
+    image: wordpress_inception
+    volumes:
+      - wp-data:/var/www/html/wordpress
+    networks:
+      backend:
+      frontend:
+  redis:
+    depends_on:
+     - wp
+    init: true
+    restart: always
+    container_name: redis
+    build: ./requirements/bonus/redis
+    image: redis_inception
+    volumes:
+      - wp-data:/var/www/html/wordpress
+    networks:
+      backend:
+  vsftpd:
+    depends_on:
+     - nginx
+    init: true
+    restart: always
+    container_name: vsftpd
+    build:
+      context: ./requirements/bonus/vsftpd
+      args:
+       - FTP_USER=${FTP_USER}
+       - FTP_PASSWORD=${FTP_PASSWORD}
+    image: vsftpd_inception
+    volumes:
+      - wp-data:/var/www/html/wordpress
+    networks:
+      backend:
+    ports:
+     - "21:21"
+     - "21100-21110:21100-21110"
+  nginx:
+    depends_on:
+     - wp
+    init: true
+    restart: always
+    build:
+      context: ./requirements/NGINX
+      args:
+        - NGINX_CERT=${NGINX_CERT}
+        - NGINX_KEY=${NGINX_KEY}
+        - DOMAIN_NAME=${DOMAIN_NAME}
+    container_name: nginx
+    image: nginx_inception
+    volumes:
+      - wp-data:/var/www/html/wordpress
+    networks:
+      frontend:
+    ports:
+      - "443:443"
+  portfolio:
+    init: true
+    restart: always
+    build:
+      context: ./requirements/bonus/portfolio
+      args:
+        - DOMAIN_NAME=${DOMAIN_NAME}
+    container_name: portfolio
+    image: portfolio_inception
+    volumes:
+      - portfolio-data:/var/www
+    networks:
+      frontend:
+    ports:
+      - "9000:9000"
+  adminer:
+    init: true
+    restart: always
+    build:
+      context: ./requirements/bonus/adminer
+    container_name: adminer
+    image: adminer_inception
+    volumes:
+      - wp-data:/var/www/html/wordpress
+    networks:
+      frontend:
+      backend:
+    ports:
+      - "8070:8070"
+  traefik:
+    init: true
+    restart: always
+    build: ./requirements/bonus/traefik
+    container_name: traefik
+    image: traefik_inception
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      frontend:
+      backend:
+    ports:
+     - "80:80"
+     - "8080:8080"
+
+networks:
+  backend:
+    driver: bridge
+  frontend:
+    driver: bridge
+
+volumes:
+  db-data:
+    name: MariaDB
+    driver_opts:
+      type: none
+      device: ${HOME_INCEPTION}/data/db-data
+      o: bind
+  wp-data:
+    name: WordPress
+    driver_opts:
+      type: none
+      device: ${HOME_INCEPTION}/data/www-data
+      o: bind
+  portfolio-data:
+    name: Portfolio
+    driver_opts:
+      type: none
+      device: ${HOME_INCEPTION}/data/folio-data
+      o: bind
